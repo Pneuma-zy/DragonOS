@@ -289,7 +289,7 @@ pub fn vfs_getattr(
         kstat.ctime.tv_nsec = metadata.ctime.tv_nsec;
     }
     if request_mask.contains(PosixStatxMask::STATX_INO) {
-        kstat.ino = metadata.inode_id.into() as u64;
+        kstat.ino = inode.reported_ino(&metadata).into() as u64;
     }
     if request_mask.contains(PosixStatxMask::STATX_SIZE) {
         kstat.size = metadata.size as usize;
@@ -359,7 +359,7 @@ pub fn vfs_fstat(dfd: i32) -> Result<KStat, SystemError> {
         .read()
         .get_file_by_fd(dfd)
         .ok_or(SystemError::EBADF)?;
-    let inode = file.inode();
+    let inode = file.path_inode();
 
     // Get attributes using vfs_getattr with basic stats mask
     vfs_getattr(&inode, PosixStatxMask::STATX_BASIC_STATS, AtFlags::empty())

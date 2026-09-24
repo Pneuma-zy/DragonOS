@@ -307,6 +307,10 @@ pub fn merge_metadata_masked(target: &mut Metadata, requested: &Metadata, mask: 
     }
 }
 
+/// Calculates a masked attribute update from the inode's current metadata.
+pub type MetadataUpdate<'a> =
+    dyn FnMut(&Metadata) -> Result<(Metadata, SetMetadataMask), SystemError> + 'a;
+
 /// Apply Linux relatime rules and update only the inode access time.
 ///
 /// Local filesystems call this while holding the lock that protects their
@@ -982,6 +986,12 @@ pub trait IndexNode: Any + Sync + Send + Debug + CastFromSync {
         return Err(SystemError::ENOSYS);
     }
 
+    /// Inode number exposed through stat and directory entries. Filesystems
+    /// with fixed on-disk numbers may differ from the VFS's internal inode ID.
+    fn reported_ino(&self, metadata: &Metadata) -> InodeId {
+        metadata.inode_id
+    }
+
     /// Incarnation paired with `inode_id` for VFS cache identity.
     ///
     /// Filesystems which can reuse inode numbers while old dentries are still
@@ -1023,6 +1033,21 @@ pub trait IndexNode: Any + Sync + Send + Debug + CastFromSync {
             return Ok(());
         }
         self.set_metadata(metadata)
+    }
+
+    /// Compute and apply an attribute change from the current inode state.
+    ///
+    /// Filesystems with a shared, mutable inode can override this to keep
+    /// permission checks and the masked update under their metadata lock.
+    /// The default retains the existing VFS behavior and setter checks.
+    fn update_metadata_masked(
+        &self,
+        update: &mut MetadataUpdate<'_>,
+    ) -> Result<SetMetadataMask, SystemError> {
+        let current = self.metadata()?;
+        let (requested, mask) = update(&current)?;
+        self.set_metadata_masked(&requested, mask)?;
+        Ok(mask)
     }
 
     /// Atomically evaluate atime policy and update only atime.
@@ -1352,23 +1377,25 @@ pub trait IndexNode: Any + Sync + Send + Debug + CastFromSync {
         let names = self.list()?;
         let mut entries = Vec::with_capacity(names.len());
         for (index, name) in names.into_iter().enumerate() {
-            let metadata = match name.as_str() {
-                "." => self.metadata(),
-                ".." => self.parent().and_then(|parent| parent.metadata()),
+            let entry = match name.as_str() {
+                "." => self.metadata().map(|md| (self.reported_ino(&md), md)),
+                ".." => self
+                    .parent()
+                    .and_then(|parent| parent.metadata().map(|md| (parent.reported_ino(&md), md))),
                 _ => match self.find(&name) {
-                    Ok(child) => child.metadata(),
+                    Ok(child) => child.metadata().map(|md| (child.reported_ino(&md), md)),
                     Err(SystemError::ENOENT) => continue,
                     Err(error) => return Err(error),
                 },
             };
-            let metadata = match metadata {
-                Ok(metadata) => metadata,
+            let (ino, metadata) = match entry {
+                Ok(entry) => entry,
                 Err(SystemError::ENOENT) => continue,
                 Err(error) => return Err(error),
             };
             entries.push(DirectoryEntry {
                 name: name.into_bytes(),
-                ino: metadata.inode_id.into() as u64,
+                ino: ino.into() as u64,
                 d_type: metadata.file_type.get_file_type_num() as u8,
                 next_cookie: (index + 1) as u64,
             });
