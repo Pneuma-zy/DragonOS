@@ -19,11 +19,7 @@ pub fn current_cpu_id() -> ProcessorId {
     let ptr: *const LocalContext = riscv::register::tp::read() as *const LocalContext;
 
     if core::intrinsics::unlikely(ptr.is_null()) {
-        // `tp` 尚未由 `init_local_context()` 设置（早期启动）。这里必须无锁地读取
-        // hartid：`boot_params()` 的读写锁会调用 `in_interrupt()` ->
-        // `smp_get_processor_id()` -> `current_cpu_id()`，在本函数内形成无限递归
-        // 并冲垮内核栈。
-        return crate::arch::init::boot_hartid();
+        return ProcessorId::new(unsafe { super::init::BOOT_HARTID });
     }
 
     unsafe { (*ptr).current_cpu() }

@@ -64,19 +64,8 @@ impl ArchBootParams {
     }
 }
 
-static BOOT_HARTID: AtomicU32 = AtomicU32::new(0);
+pub(super) static mut BOOT_HARTID: u32 = 0;
 static mut BOOT_FDT_PADDR: PhysAddr = PhysAddr::new(0);
-
-/// 启动 hart 的 id，无锁读取。
-///
-/// `current_cpu_id()` 在 `init_local_context()` 设置 `tp` 之前（早期启动）也会被
-/// 调用，此时不能通过 `boot_params()` 的锁来读取 hartid：获取该锁会走
-/// `in_interrupt() -> smp_get_processor_id() -> current_cpu_id()`，从而无限递归
-/// 并冲垮内核栈（覆盖 `.text`，最终触发非法指令）。这里用原子变量无锁读取。
-#[inline]
-pub fn boot_hartid() -> ProcessorId {
-    ProcessorId::new(BOOT_HARTID.load(Ordering::Relaxed))
-}
 
 #[no_mangle]
 unsafe extern "C" fn kernel_main(hartid: usize, fdt_paddr: usize) -> ! {
