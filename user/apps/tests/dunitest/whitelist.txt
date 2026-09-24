@@ -71,11 +71,13 @@ normal/socket_readv_semantics
 normal/socket_ioctl_netdev_query
 normal/socket_ioctl_netdev_mutation
 normal/unix_socket_shutdown
+normal/unix_reuse_options
 normal/unix_scm_rights
 fuse/fuse_core
 fuse/fuse_extended
 normal/test_procfs_link
 normal/proc_mount_exports
+normal/readlinkat_empty_path
 normal/root_mount_cmdline
 normal/kernel_cmdline_compat
 normal/proc_pid_reuse_cache
@@ -111,6 +113,7 @@ normal/page_cache_accounting
 normal/page_fault_accounting
 normal/pipe_release_wakeup
 normal/pipe_waitqueue_wakeup
+normal/pipe_metadata
 normal/oom_killer_semantics
 normal/spawn_exec_pipe_race
 normal/tty_pty_hangup
@@ -161,3 +164,5 @@ normal/tcp_connect_completion
 normal/tcp_namespace_progress
 normal/tcp_listen_backlog
 normal/tcp_connect_confirmation
+normal/netlink_netfilter
+normal/tcp_pending_error
