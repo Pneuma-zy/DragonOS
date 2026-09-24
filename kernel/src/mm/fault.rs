@@ -522,15 +522,20 @@ impl PageFaultHandler {
         {
             let _pt_edit = mm.page_table_edit();
             let mapper = &mut pfm.mapper;
-            if mapper.get_entry(address, 3).is_none() {
+            // The number of paging levels is architecture-specific (x86_64 uses
+            // four, riscv64 sv39 uses three), so the top-level index and the
+            // first table to allocate must be derived from `PAGE_LEVELS`
+            // instead of assuming the x86_64 layout.
+            let top_level = MMArch::PAGE_LEVELS - 1;
+            if mapper.get_entry(address, top_level).is_none() {
                 mapper
-                    .allocate_table(address, 2)
-                    .expect("failed to allocate PUD table");
+                    .allocate_table(address, top_level - 1)
+                    .expect("failed to allocate top-level page table");
             }
         }
         let page_flags = vma.lock().flags();
 
-        for level in 2..=3 {
+        for level in 2..=MMArch::PAGE_LEVELS - 1 {
             let level = MMArch::PAGE_LEVELS - level;
             {
                 let _pt_edit = mm.page_table_edit();
