@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicU32, Ordering};
+
 use fdt::node::FdtNode;
 use log::{debug, info};
 use system_error::SystemError;
@@ -69,10 +71,15 @@ static mut BOOT_FDT_PADDR: PhysAddr = PhysAddr::new(0);
 unsafe extern "C" fn kernel_main(hartid: usize, fdt_paddr: usize) -> ! {
     let fdt_paddr = PhysAddr::new(fdt_paddr);
 
+    BOOT_HARTID.store(hartid as u32, Ordering::Relaxed);
     unsafe {
-        BOOT_HARTID = hartid as u32;
         BOOT_FDT_PADDR = fdt_paddr;
     }
+    // 在安装 trap 向量之前先给 `tp` 一个有效的静态上下文：trap 入口
+    // (`handle_exception`) 会通过 `tp` 访问 `LocalContext`，而堆上的
+    // `LOCAL_CONTEXT` 要等 `mm_init` 之后才建立。否则早期同步异常会在
+    // trap 入口解引用空 `tp` 而无限递归。
+    unsafe { super::cpu::init_boot_local_context(boot_hartid()) };
     setup_trap_vector();
     start_kernel();
 }
@@ -124,7 +131,7 @@ unsafe fn parse_dtb() {
 #[inline(never)]
 pub fn early_setup_arch() -> Result<(), SystemError> {
     SbiDriver::early_init();
-    let hartid = unsafe { BOOT_HARTID };
+    let hartid = BOOT_HARTID.load(Ordering::Relaxed);
     let fdt_paddr = unsafe { BOOT_FDT_PADDR };
 
     let fdt =
