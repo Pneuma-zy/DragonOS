@@ -79,7 +79,7 @@ jobs:
         with:
           path: bin/riscv64-smoke-cache
           key: riscv64-smoke-${{ runner.os }}-${{ matrix.mode }}-${{ hashFiles('tools/riscv64/opensbi-smoke.sh') }}
-      - name: Boot and execute a userspace program
+      - name: Boot and exercise the userspace shell
         env:
           DRAGONOS_KERNEL_ELF: ${{ github.workspace }}/bin/kernel/kernel.elf
           DRAGONOS_EFI: ${{ github.workspace }}/bin/sysroot/efi/boot/bootriscv64.efi
