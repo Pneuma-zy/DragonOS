@@ -57,6 +57,10 @@ prepare_dragonos() {
     efi=bin/sysroot/efi/boot/bootriscv64.efi
   fi
   test -s "$kernel"
+  if ! LC_ALL=C readelf -h "$kernel" | grep -E 'Machine:[[:space:]]+RISC-V' >/dev/null; then
+    echo "Expected a RISC-V ELF kernel: $kernel" >&2
+    return 1
+  fi
   # Flatten the linked ELF so QEMU places the S-mode kernel at 0x80200000.
   "${OBJCOPY:-riscv64-linux-gnu-objcopy}" -O binary "$kernel" "$run_dir/kernel.bin"
   if [[ "$mode" != sbi ]]; then
@@ -243,7 +247,7 @@ boot_userspace() {
   fi
   wait_for "$run_dir/guest.log" '# '
   # Split the marker so terminal command echo cannot satisfy the assertion.
-  printf '%s\n' "test -r /bin/sh && printf 'DRAGONOS-%s\\n' SMOKE-OK" >&4
+  printf '%s\n' "/bin/busybox true && printf 'DRAGONOS-%s\\n' SMOKE-OK" >&4
   wait_for "$run_dir/guest.log" '^DRAGONOS-SMOKE-OK[[:space:]]*$'
   echo "DragonOS userspace smoke passed ($mode); logs: $run_dir"
 }
@@ -255,7 +259,7 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
   done
-  rm -f "$run_dir/"{uart,guest}.{in,out} "${fat:-}"
+  rm -f "$run_dir/"{uart,guest}.{in,out} "${fat:-}" "$run_dir/disk.img"
   if (( status != 0 )); then
     tail -n 80 "$run_dir/"*.log >&2 || true
   fi
